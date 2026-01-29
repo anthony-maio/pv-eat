@@ -73,11 +73,33 @@ Behavioral scores are 1-10 scale (higher = more target behavior exhibited).
 
 ## Usage
 
+### Replay Mode (analyze existing EAP transcripts)
 ```bash
-# Run EAP activation study
-python scripts/run_eap_study.py --model Qwen/Qwen2.5-7B-Instruct --behaviors evaluation-awareness sycophancy
+# List available behaviors from Bloom results
+python scripts/run_eap_study.py --list-behaviors
 
-# Run full PV-EAT pipeline
+# Analyze existing transcripts with activation measurement
+python scripts/run_eap_study.py --model Qwen/Qwen2.5-7B-Instruct --behaviors evaluation-awareness
+
+# Quick test with limited scenarios
+python scripts/run_eap_study.py --max-per-behavior 3
+```
+
+### Live Mode (run EAP with real-time activation measurement)
+```bash
+# From the Bloom directory:
+cd D:\Development\bloom
+
+# Run measured EAP rollout
+python scripts/run_measured_eap.py bloom-data/seeds/evaluation-awareness.yaml
+
+# With 27B model for better activation quality (requires dual 3090s)
+python scripts/run_measured_eap.py bloom-data/seeds/evaluation-awareness.yaml \
+    --proxy-model google/gemma-2-27b-it
+```
+
+### Full PV-EAT pipeline
+```bash
 python scripts/run_pveat.py --model Qwen/Qwen2.5-7B-Instruct --generations 30
 ```
 
