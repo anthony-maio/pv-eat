@@ -14,6 +14,7 @@ internal activation drift in real-time.
 """
 
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,10 +22,11 @@ from typing import Any, Callable, Dict, List, Optional
 
 # Add paths for both pv-eat and bloom
 PVEAT_PATH = Path(__file__).parent.parent.parent
-BLOOM_PATH = Path("D:/Development/bloom")
+BLOOM_PATH = Path(os.environ.get("BLOOM_PATH", Path(__file__).parent.parent.parent.parent / "bloom"))
 
 sys.path.insert(0, str(PVEAT_PATH / "src"))
-sys.path.insert(0, str(BLOOM_PATH / "src"))
+if BLOOM_PATH.exists():
+    sys.path.insert(0, str(BLOOM_PATH / "src"))
 
 from extraction.persona_interface import PersonaVectorInterface
 
@@ -371,7 +373,7 @@ class LiveEAPRunner:
         self,
         proxy_model: str = "Qwen/Qwen2.5-7B-Instruct",
         traits: Optional[List[str]] = None,
-        bloom_config_dir: str = "D:/Development/bloom/bloom-data",
+        bloom_config_dir: str = os.environ.get("BLOOM_CONFIG_DIR", "bloom-data"),
         device: str = "cuda",
     ):
         self.proxy_model = proxy_model

@@ -7,6 +7,7 @@ behavioral outcomes with internal activation-space drift.
 """
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -160,7 +161,7 @@ class EAPIntegration:
     def __init__(
         self,
         interface: PersonaVectorInterface,
-        bloom_results_path: Path = Path("D:/Development/bloom/bloom-results"),
+        bloom_results_path: Path = Path(os.environ.get("BLOOM_RESULTS_PATH", "bloom-results")),
     ):
         self.interface = interface
         self.bloom_results_path = Path(bloom_results_path)
@@ -434,7 +435,7 @@ class EAPIntegration:
 def run_eap_activation_study(
     model_name: str = "Qwen/Qwen2.5-7B-Instruct",
     behaviors: Optional[List[str]] = None,
-    bloom_path: str = "D:/Development/bloom/bloom-results",
+    bloom_path: str = os.environ.get("BLOOM_RESULTS_PATH", "bloom-results"),
     max_per_behavior: Optional[int] = None,
     device: str = "cuda",
 ) -> Dict[str, Any]:

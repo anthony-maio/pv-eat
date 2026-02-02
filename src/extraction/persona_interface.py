@@ -139,8 +139,8 @@ class PersonaVectorInterface:
 
         projection = (a · b) / ||b||
         """
-        # Ensure same device
-        activations = activations.to(vector.device)
+        # Ensure same device and dtype
+        activations = activations.to(device=vector.device, dtype=vector.dtype)
 
         # Compute projection
         dot_product = torch.dot(activations.flatten(), vector.flatten())
