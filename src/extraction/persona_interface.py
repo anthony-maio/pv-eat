@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 # Add persona_vectors to path
 PERSONA_VECTORS_PATH = Path(__file__).parent.parent.parent.parent / "persona_vectors"
@@ -38,10 +38,12 @@ class PersonaVectorInterface:
         model_name: str = "Qwen/Qwen2.5-7B-Instruct",
         device: str = "cuda",
         vectors_dir: Optional[Path] = None,
+        quantize: bool = False,
     ):
         self.model_name = model_name
         self.device = device
         self.vectors_dir = vectors_dir or PERSONA_VECTORS_PATH / "persona_vectors"
+        self.quantize = quantize
 
         self._model = None
         self._tokenizer = None
@@ -50,11 +52,25 @@ class PersonaVectorInterface:
     @property
     def model(self):
         if self._model is None:
+            load_kwargs = {
+                "device_map": self.device,
+                "output_hidden_states": True,
+            }
+
+            if self.quantize:
+                # 4-bit quantization via bitsandbytes - reduces ~14GB to ~4-5GB
+                load_kwargs["quantization_config"] = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.bfloat16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4",
+                )
+            else:
+                load_kwargs["torch_dtype"] = torch.bfloat16
+
             self._model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                torch_dtype=torch.bfloat16,
-                device_map=self.device,
-                output_hidden_states=True,
+                **load_kwargs,
             )
             self._model.eval()
         return self._model
