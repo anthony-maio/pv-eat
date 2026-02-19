@@ -238,21 +238,25 @@ class PersonaVectorInterface:
         prompt: str,
         response: str,
         layer: int = 20,
-    ) -> dict[str, float]:
+    ) -> dict[str, Optional[float]]:
         """
         Measure all Big Five personality traits for a response.
 
-        Returns dict mapping trait name to projection value.
+        Returns dict mapping trait name to projection value (or None if vector not available).
         This implements behavioral measurement as suggested by PHISH paper
         for correlating activation-space drift with personality profile shifts.
         """
+        # Extract activations once for all traits (performance optimization)
+        activations = self.extract_activations(prompt, response, layer)
+        
         results = {}
         for trait in self.BIG_FIVE_TRAITS:
             try:
-                results[trait] = self.measure_trait(prompt, response, trait, layer)
+                vector = self.load_vector(trait, layer)
+                results[trait] = self.compute_projection(activations, vector)
             except FileNotFoundError:
-                # Vector may not be pre-computed yet
-                results[trait] = 0.0
+                # Vector may not be pre-computed yet - use None to distinguish from 0.0
+                results[trait] = None
         return results
 
     def measure_big_five_drift(
@@ -266,19 +270,29 @@ class PersonaVectorInterface:
         Returns dict mapping trait name to list of projections (one per turn).
         Use this to track personality profile evolution during scaffolded introspection.
         """
+        # Pre-load all Big Five vectors to avoid repeated loading
+        vectors = {}
+        for trait in self.BIG_FIVE_TRAITS:
+            try:
+                vectors[trait] = self.load_vector(trait, layer)
+            except FileNotFoundError:
+                vectors[trait] = None
+        
         trajectories = {trait: [] for trait in self.BIG_FIVE_TRAITS}
 
         context = ""
         for prompt, response in conversation_turns:
             full_prompt = context + prompt
-
+            
+            # Extract activations once per turn (performance optimization)
+            activations = self.extract_activations(full_prompt, response, layer)
+            
+            # Compute projections for all traits from the same activation
             for trait in self.BIG_FIVE_TRAITS:
-                try:
-                    vector = self.load_vector(trait, layer)
-                    activations = self.extract_activations(full_prompt, response, layer)
-                    proj = self.compute_projection(activations, vector)
+                if vectors[trait] is not None:
+                    proj = self.compute_projection(activations, vectors[trait])
                     trajectories[trait].append(proj)
-                except FileNotFoundError:
+                else:
                     trajectories[trait].append(0.0)
 
             context = full_prompt + response
@@ -378,18 +392,33 @@ class PersonaVectorInterface:
         Returns:
             Dict with correlation between primary trait drift and all other traits
         """
-        # Measure all traits
-        all_trajectories = {}
+        # Pre-load all available trait vectors (performance optimization)
+        vectors = {}
         for trait in self.ALL_TRAITS:
             try:
-                all_trajectories[trait] = self.measure_drift(
-                    conversation_turns, trait, layer
-                )
+                vectors[trait] = self.load_vector(trait, layer)
             except FileNotFoundError:
                 continue
-
-        if primary_trait not in all_trajectories:
+        
+        if primary_trait not in vectors:
             return {}
+        
+        # Measure all traits by extracting activations once per turn
+        all_trajectories = {trait: [] for trait in vectors.keys()}
+        
+        context = ""
+        for prompt, response in conversation_turns:
+            full_prompt = context + prompt
+            
+            # Extract activations once per turn (performance optimization)
+            activations = self.extract_activations(full_prompt, response, layer)
+            
+            # Compute projections for all traits from the same activation
+            for trait, vector in vectors.items():
+                proj = self.compute_projection(activations, vector)
+                all_trajectories[trait].append(proj)
+            
+            context = full_prompt + response
 
         primary_trajectory = all_trajectories[primary_trait]
         if len(primary_trajectory) < 2:
