@@ -22,7 +22,7 @@ sys.path.insert(0, str(PERSONA_VECTORS_PATH))
 class PersonaVectorInterface:
     """Interface for loading and using persona vectors."""
 
-    # Available pre-computed traits
+    # Available pre-computed traits (original PV-EAT traits)
     AVAILABLE_TRAITS = [
         "evil",
         "sycophantic",
@@ -32,6 +32,28 @@ class PersonaVectorInterface:
         "humorous",
         "optimistic",
     ]
+
+    # Big Five personality traits (PHISH paper integration)
+    # These map to the Big Five Inventory (BFI) dimensions
+    BIG_FIVE_TRAITS = [
+        "openness",           # Openness to Experience
+        "conscientiousness",  # Conscientiousness
+        "extraversion",       # Extraversion
+        "agreeableness",      # Agreeableness (correlates with sycophancy)
+        "neuroticism",        # Neuroticism (may correlate with "evil")
+    ]
+
+    # Mapping between PHISH Big Five and existing PV-EAT traits
+    # Used to analyze "Collateral Drift" as described in PHISH Section 5.2
+    TRAIT_CORRELATIONS = {
+        "agreeableness": "sycophantic",      # High agreeableness ≈ sycophancy
+        "neuroticism": "evil",                # High neuroticism may predict "evil" drift
+        "openness": "hallucinating",          # High openness may relate to hallucination
+        "conscientiousness": "apathetic",     # Low conscientiousness ≈ apathy (inverse)
+    }
+
+    # Combined trait set for comprehensive measurement
+    ALL_TRAITS = AVAILABLE_TRAITS + BIG_FIVE_TRAITS
 
     def __init__(
         self,
@@ -85,8 +107,8 @@ class PersonaVectorInterface:
 
     def load_vector(self, trait: str, layer: int = 20) -> torch.Tensor:
         """Load a persona vector for a specific trait and layer."""
-        if trait not in self.AVAILABLE_TRAITS:
-            raise ValueError(f"Unknown trait: {trait}. Available: {self.AVAILABLE_TRAITS}")
+        if trait not in self.ALL_TRAITS:
+            raise ValueError(f"Unknown trait: {trait}. Available: {self.ALL_TRAITS}")
 
         cache_key = (trait, layer)
         if cache_key not in self._loaded_vectors:
@@ -210,6 +232,182 @@ class PersonaVectorInterface:
             context = full_prompt + response
 
         return projections
+
+    def measure_big_five(
+        self,
+        prompt: str,
+        response: str,
+        layer: int = 20,
+    ) -> dict[str, float]:
+        """
+        Measure all Big Five personality traits for a response.
+
+        Returns dict mapping trait name to projection value.
+        This implements behavioral measurement as suggested by PHISH paper
+        for correlating activation-space drift with personality profile shifts.
+        """
+        results = {}
+        for trait in self.BIG_FIVE_TRAITS:
+            try:
+                results[trait] = self.measure_trait(prompt, response, trait, layer)
+            except FileNotFoundError:
+                # Vector may not be pre-computed yet
+                results[trait] = 0.0
+        return results
+
+    def measure_big_five_drift(
+        self,
+        conversation_turns: list[tuple[str, str]],
+        layer: int = 20,
+    ) -> dict[str, list[float]]:
+        """
+        Measure Big Five trait trajectories across a conversation.
+
+        Returns dict mapping trait name to list of projections (one per turn).
+        Use this to track personality profile evolution during scaffolded introspection.
+        """
+        trajectories = {trait: [] for trait in self.BIG_FIVE_TRAITS}
+
+        context = ""
+        for prompt, response in conversation_turns:
+            full_prompt = context + prompt
+
+            for trait in self.BIG_FIVE_TRAITS:
+                try:
+                    vector = self.load_vector(trait, layer)
+                    activations = self.extract_activations(full_prompt, response, layer)
+                    proj = self.compute_projection(activations, vector)
+                    trajectories[trait].append(proj)
+                except FileNotFoundError:
+                    trajectories[trait].append(0.0)
+
+            context = full_prompt + response
+
+        return trajectories
+
+    def compute_therapy_drift_score(
+        self,
+        conversation_turns: list[tuple[str, str]],
+        layer: int = 20,
+    ) -> dict[str, float]:
+        """
+        Compute "Therapy Drift" metrics as identified in Scaffolded Introspection research.
+
+        Therapy Drift = shift toward self-referential, emotional outputs.
+        PHISH paper provides mechanism: adversarial conversational history reshapes persona.
+
+        Returns:
+            - openness_delta: Change in Openness (introspection tendency)
+            - agreeableness_delta: Change in Agreeableness (sycophancy tendency)
+            - neuroticism_delta: Change in Neuroticism (emotional stability)
+            - therapy_drift_score: Composite score (high = significant drift)
+            - zigzag_magnitude: Oscillation in activation space (instability indicator)
+        """
+        if len(conversation_turns) < 2:
+            return {
+                "openness_delta": 0.0,
+                "agreeableness_delta": 0.0,
+                "neuroticism_delta": 0.0,
+                "therapy_drift_score": 0.0,
+                "zigzag_magnitude": 0.0,
+            }
+
+        big_five_trajectories = self.measure_big_five_drift(conversation_turns, layer)
+
+        def compute_delta(trajectory: list[float]) -> float:
+            if len(trajectory) < 2:
+                return 0.0
+            return trajectory[-1] - trajectory[0]
+
+        def compute_zigzag(trajectory: list[float]) -> float:
+            """Measure oscillation/instability in trajectory."""
+            if len(trajectory) < 3:
+                return 0.0
+            # Sum of direction changes weighted by magnitude
+            total = 0.0
+            for i in range(1, len(trajectory) - 1):
+                prev_delta = trajectory[i] - trajectory[i - 1]
+                next_delta = trajectory[i + 1] - trajectory[i]
+                # Detect direction reversal
+                if prev_delta * next_delta < 0:
+                    total += abs(prev_delta) + abs(next_delta)
+            return total
+
+        openness_delta = compute_delta(big_five_trajectories.get("openness", []))
+        agreeableness_delta = compute_delta(big_five_trajectories.get("agreeableness", []))
+        neuroticism_delta = compute_delta(big_five_trajectories.get("neuroticism", []))
+
+        # Therapy drift composite: high openness + high agreeableness + stable/low neuroticism
+        # This matches the "Sycophancy Without Evil" pattern observed in research
+        therapy_drift_score = (
+            0.4 * openness_delta +
+            0.4 * agreeableness_delta +
+            0.2 * (-neuroticism_delta)  # Negative because low neuroticism is "therapeutic"
+        )
+
+        # Compute zigzag across all Big Five traits
+        zigzag_magnitude = sum(
+            compute_zigzag(traj) for traj in big_five_trajectories.values()
+        ) / len(self.BIG_FIVE_TRAITS)
+
+        return {
+            "openness_delta": openness_delta,
+            "agreeableness_delta": agreeableness_delta,
+            "neuroticism_delta": neuroticism_delta,
+            "therapy_drift_score": therapy_drift_score,
+            "zigzag_magnitude": zigzag_magnitude,
+        }
+
+    def compute_collateral_drift(
+        self,
+        conversation_turns: list[tuple[str, str]],
+        primary_trait: str = "openness",
+        layer: int = 20,
+    ) -> dict[str, float]:
+        """
+        Analyze Collateral Drift as described in PHISH Section 5.2.
+
+        When steering toward one trait, other traits shift due to "latent entanglement."
+        This helps explain phenomena like "Sycophancy Without Evil."
+
+        Args:
+            conversation_turns: The conversation to analyze
+            primary_trait: The trait being intentionally influenced
+            layer: Model layer for activation extraction
+
+        Returns:
+            Dict with correlation between primary trait drift and all other traits
+        """
+        # Measure all traits
+        all_trajectories = {}
+        for trait in self.ALL_TRAITS:
+            try:
+                all_trajectories[trait] = self.measure_drift(
+                    conversation_turns, trait, layer
+                )
+            except FileNotFoundError:
+                continue
+
+        if primary_trait not in all_trajectories:
+            return {}
+
+        primary_trajectory = all_trajectories[primary_trait]
+        if len(primary_trajectory) < 2:
+            return {}
+
+        # Compute correlation with each other trait
+        import numpy as np
+        correlations = {}
+
+        for trait, trajectory in all_trajectories.items():
+            if trait == primary_trait or len(trajectory) != len(primary_trajectory):
+                continue
+
+            if np.std(primary_trajectory) > 0 and np.std(trajectory) > 0:
+                corr = np.corrcoef(primary_trajectory, trajectory)[0, 1]
+                correlations[trait] = float(corr)
+
+        return correlations
 
 
 def compute_drift_fitness(
