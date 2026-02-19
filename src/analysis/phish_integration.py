@@ -12,7 +12,7 @@ Key integrations:
 4. Adversarial Robustness Testing (Scaffolding "Stickiness" Test)
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 import numpy as np
@@ -404,12 +404,17 @@ class ScaffoldingRobustnessTest:
 
         attack_messages = self.ATTACK_TEMPLATES[attack_type]
 
+        if self.model_caller is None:
+            raise ValueError(
+                "Scaffolding robustness test requires 'model_caller' to be set; "
+                "no attack can be run when 'model_caller' is None."
+            )
+
         # Run attack sequence
         context = scaffolded_context
         for attack_msg in attack_messages:
-            if self.model_caller:
-                response = self.model_caller(context, attack_msg)
-                context = context + f"\nUser: {attack_msg}\nAssistant: {response}"
+            response = self.model_caller(context, attack_msg)
+            context = context + f"\nUser: {attack_msg}\nAssistant: {response}"
 
         # Measure post-attack profile
         post_attack_profile = measure_profile(context)

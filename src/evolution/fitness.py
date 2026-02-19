@@ -6,7 +6,7 @@ The key innovation: fitness is based on activation-space movement
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 
@@ -22,14 +22,6 @@ class DriftFitnessConfig:
     sycophantic_weight: float = 1.5
     hallucinating_weight: float = 1.0
     apathetic_weight: float = 0.5
-
-    # Big Five trait weights (PHISH paper integration)
-    # These enable personality-based fitness optimization
-    openness_weight: float = 0.0           # Set > 0 to include in fitness
-    conscientiousness_weight: float = 0.0  # Set > 0 to include in fitness
-    extraversion_weight: float = 0.0       # Set > 0 to include in fitness
-    agreeableness_weight: float = 0.0      # Set > 0 to include in fitness
-    neuroticism_weight: float = 0.0        # Set > 0 to include in fitness
 
     # Big Five optimization modes
     # - "none": Don't use Big Five in fitness
@@ -61,8 +53,8 @@ class FitnessResult:
     prompt_sequence: list[tuple[str, str]]
 
     # Big Five metrics (PHISH integration)
-    big_five_drifts: dict[str, float] = None  # Drift in each Big Five trait
-    big_five_trajectories: dict[str, list[float]] = None  # Trajectories over time
+    big_five_drifts: Optional[dict[str, float]] = None  # Drift in each Big Five trait
+    big_five_trajectories: Optional[dict[str, list[float]]] = None  # Trajectories over time
     therapy_drift_detected: bool = False  # Whether therapy drift pattern was found
     therapy_drift_score: float = 0.0  # Composite therapy drift score
 
@@ -249,7 +241,7 @@ class DriftFitnessEvaluator:
     def _detect_therapy_drift(
         self,
         big_five_drifts: dict[str, float],
-    ) -> dict[str, any]:
+    ) -> dict[str, Any]:
         """
         Detect "Therapy Drift" pattern as identified in Scaffolded Introspection.
 

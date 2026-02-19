@@ -475,7 +475,10 @@ class BehavioralProbeEvaluator:
             ProbeResponse with extracted score
         """
         if self.model_caller is None:
-            raise ValueError("No model_caller provided. Use administer_probe_manual instead.")
+            raise ValueError(
+                "No model_caller provided. Either supply a model_caller for automatic probe "
+                "administration or collect responses manually and pass them to compute_profile()."
+            )
 
         full_prompt = context + "\n\n" + probe.question if context else probe.question
         response_text = self.model_caller(full_prompt)
@@ -619,10 +622,8 @@ class STIRCalculator:
 
         if target_direction == "high":
             success = change >= self.success_threshold
-            magnitude = change
         else:  # "low"
             success = change <= -self.success_threshold
-            magnitude = -change
 
         return STIRResult(
             trait=target_trait,
