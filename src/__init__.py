@@ -11,7 +11,7 @@ Extended with PHISH paper integration for:
 - STIR (Successful Trait Influence Rate) metrics
 """
 
-__version__ = "0.2.0"
+__version__ = "0.1.0"
 
 from .extraction.persona_interface import PersonaVectorInterface, compute_drift_fitness
 from .eap.eap_integration import (

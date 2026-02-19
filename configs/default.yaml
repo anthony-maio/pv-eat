@@ -92,8 +92,6 @@ output:
   dir: "experiments/runs"
   save_every: 5  # Checkpoint every N generations
   save_transcripts: true
-  save_big_five_trajectories: true  # Save Big Five measurements
-  save_correlation_reports: true  # Save vector-behavior correlation reports
 
 # Logging
 logging:
